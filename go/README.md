@@ -116,3 +116,34 @@ SETUP=true ./mirakurun-go
 - `deploy/README.md` — 切替手順と前提条件
 - `deploy/cutover.sh` — 事前確認 → バックアップ → 差し替え → ヘルスチェック → 失敗時の自動ロールバック
 - `deploy/rollback.sh` — バックアップから Node 版へ戻す
+
+## ブランチ運用
+
+Go 実装は **`feature/go-rewrite` ブランチで管理**します。`master` は本家 `Chinachu/Mirakurun` の追従専用とし、
+Go の変更を入れません (本家の更新を素直に取り込める状態を保つため)。
+
+| ブランチ | 役割 | 入れてよい変更 |
+|---|---|---|
+| `master` | 本家 `Chinachu/Mirakurun` の同期用 | upstream の取り込みのみ |
+| `feature/go-rewrite` | Go 実装の管理ブランチ | `go/` 配下のみ (Node 実装 `src/` は変更しない) |
+
+### 本家の更新を取り込む
+
+```sh
+git fetch upstream
+git checkout master && git merge --ff-only upstream/master && git push origin master
+git checkout feature/go-rewrite && git merge master      # 競合したら go/ 側で解決する
+git push origin feature/go-rewrite
+```
+
+### 変更を入れるときの確認
+
+```sh
+cd go
+gofmt -l . && go vet ./... && go test ./...        # 静的解析と単体テスト
+../go/deploy/parity-check.sh --config-dir /usr/local/etc/mirakurun --port 40776 \
+    --node-url http://127.0.0.1:40772              # 本番の設定・DB を扱う変更は Node 版と差分確認
+```
+
+本番の切り替えは `deploy/cutover.sh` を管理者 (root) が実行します。切り替えは常に独立したステップであり、
+このブランチを更新しても本番は変更されません。
